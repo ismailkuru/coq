@@ -4,14 +4,125 @@ Require Import Heaps.
 Require Import String.
 Require Import SeparationAlgebras.
 Require Import SetoidClass.
-Require Import FMaps. 
+Require Import MSets.
 
-Module TadaModel (ht : HeapTypes).
+Module Type RegionTypes.
+  Parameter rid : Type.
+  Parameter rtype : Type.
+  Parameter RT : rtype -> Type.
+  Parameter rbelong : rid -> rtype -> Prop.
+  Parameter rid_rtype : forall t r,
+      rbelong r t -> RT t.
+  Parameter rbelong_dec : forall r t,
+      {rbelong r t} + {~rbelong r t}.
+  
+  Axiom rid_rtype_injective : forall t r1 B1 r2 B2,
+    rid_rtype t r1 B1 = rid_rtype t r2 B2 ->
+      r1 = r2.
+    
+
+  Parameter to_rid : forall t, RT t -> rid.
+  Axiom to_rid_belong : forall t (rr : RT t),
+    rbelong (to_rid t rr) t.
+  Axiom to_rid_inverse : forall t r B,
+      to_rid t (rid_rtype t r B) = r.
+  
+
+  Parameter rfresh : rtype -> rid.
+  Axiom fresh_not_belong : forall t,
+      ~ rbelong (rfresh t) t.
+
+  Parameter rtempty : rtype.
+  Axiom rtempty_not_belong : forall r,
+      ~ rbelong r rtempty.
+
+  Parameter rtextend : forall t r, ~ rbelong r t -> rtype.
+  Axiom rtextend_extended : forall t r P r',
+    rbelong r' (rtextend t r P) <->
+      (r' = r \/ rbelong r' t).
+End RegionTypes.
+
+Module RegionTypesNat (ms : SetsOn) : RegionTypes.
+  Module Nat_Sets := ms Nat_as_OT.
+
+  Definition rid := nat.
+  Definition rtype := Nat_Sets.t.
+  Definition RT (t : rtype) := { r | Nat_Sets.In r t }.
+  Definition rbelong : rid -> rtype -> Prop := Nat_Sets.In.
+  Definition rid_rtype : forall t r,
+      rbelong r t -> RT t.
+   intros t r.
+   exists r.
+   trivial.
+  Defined.
+
+  Definition rbelong_dec : forall r t,
+      {rbelong r t} + {~rbelong r t}.
+   intros.
+   generalize (Nat_Sets.mem_spec t r).
+   destruct (Nat_Sets.mem r t); intuition.
+  Defined.
+
+  Proposition rid_rtype_injective : forall t r1 B1 r2 B2,
+    rid_rtype t r1 B1 = rid_rtype t r2 B2 ->
+      r1 = r2.
+   cbv; intuition.
+   inversion H; trivial.
+  Qed.
+
+  Definition to_rid t : RT t -> rid :=
+      proj1_sig (A:=rid) (P:=_).
+
+  Proposition to_rid_belong : forall t (rr : RT t),
+    rbelong (to_rid t rr) t.
+   cbv; intuition.
+   destruct rr; trivial.
+  Qed.
+  
+  Proposition to_rid_inverse : forall t r B,
+      to_rid t (rid_rtype t r B) = r.
+   cbv; intuition.
+  Qed.
+  
+  Definition rfresh (t : rtype) : rid :=
+   match (Nat_Sets.max_elt t) with
+   | Some r => S r
+   | None => 0
+   end.
+
+  Lemma fresh_not_belong : forall t,
+      ~ rbelong (rfresh t) t.
+   cbv; intuition.
+   remember (Nat_Sets.max_elt t) as x.
+   symmetry in Heqx.
+   destruct x.
+    generalize (Nat_Sets.max_elt_spec2 Heqx H).
+    auto.
+   
+    eapply Nat_Sets.max_elt_spec3; eauto.
+  Qed.
+
+  Definition rtempty : rtype := Nat_Sets.empty.
+  Lemma rtempty_not_belong : forall r,
+      ~ rbelong r rtempty.
+   apply Nat_Sets.empty_spec.
+  Qed.
+
+  Definition rtextend t r : ~ rbelong r t -> rtype :=
+    fun _ => Nat_Sets.add r t.
+
+  Proposition rtextend_extended : forall t r P r',
+    rbelong r' (rtextend t r P) <->
+      (r' = r \/ rbelong r' t).
+   cbv; intros.
+   generalize (Nat_Sets.add_spec t r r').
+   intuition.
+  Qed.
+End RegionTypesNat.
+
+Module TadaModel (ht : HeapTypes) (Import rt : RegionTypes).
  Module Export TheHeap := MHeaps ht.
 
- (* Region identifiers will be nats *)
- Definition RID := nat.
- Module RID_OT := Nat_as_OT.
  (* Action identifiers are pairs of string and lists of values *)
  Definition AID := (string * (list Val))%type.
 
@@ -23,18 +134,18 @@ Module TadaModel (ht : HeapTypes).
      sa_sa : SepAlg sa_op
    }.
 
- 
- (* Now let's define a region type as a finite mapping from
-    region identifiers to separation algebras. *)
+ Definition RSA (t : rtype) := RT t -> SA.
 
- Module R_Types := FMapList.Make RID_OT.
- Definition R_type := R_Types.t SA.
+ Record LState (t : rtype) (rsat : RSA t) := {
+   ls_hp : store;
+   ls_gd : RT t -> RSA t
+  }.
 
- Record LState (T : R_type) := { ls_hp : store; ls_gd : Guard }.
-
- Record world :=
+ Record World (t : rtype) :=
    {
-     local_state : LState;
-     shared_state : SState;
-     if_spec : IFSpec
+     world_rsa : RSA t;
+     world_local : LState t world_rsa;
+     world_shared : RT t -> LState t world_rsa
+     (* if_spec : ... *)
    }.
+End TadaModel.
