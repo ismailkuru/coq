@@ -141,11 +141,25 @@ Module TadaModel (ht : HeapTypes) (Import rt : RegionTypes).
    ls_gd : RT t -> RSA t
   }.
 
+ Definition SState (t : rtype) (rsat : RSA t) := RT t -> LState t rsat.
+
+ (* Type for interference specifications.
+     Choices: this does not need to be local (with respect to the guard) --
+       we ill interpret it as the local closure.
+  *)
+ Definition IF_Spec (t : rtype) (rsat : RSA t) (r : RT t) :=
+   (sa_dom (rsat r)) -> relation (SState t rsat).
+
+     
+
  Record World (t : rtype) :=
    {
      world_rsa : RSA t;
      world_local : LState t world_rsa;
-     world_shared : RT t -> LState t world_rsa
-     (* if_spec : ... *)
+     world_shared : SState t world_rsa;
+     world_if_spec : forall r : RT t, IF_Spec t world_rsa r
    }.
+
+
+
 End TadaModel.
