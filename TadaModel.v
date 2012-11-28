@@ -3,8 +3,9 @@ Add LoadPath "c:\td202\GitHub\coq\views".
 Require Import Heaps.
 Require Import String.
 Require Import SeparationAlgebras.
-Require Import SetoidClass.
 Require Import MSets.
+Require Import SetoidClass.
+Require Import Tactics.
 
 Module Type RegionTypes.
   Parameter rid : Type.
@@ -13,20 +14,19 @@ Module Type RegionTypes.
   Parameter rbelong : rid -> rtype -> Prop.
   Parameter rid_rtype : forall t r,
       rbelong r t -> RT t.
+  Axiom rid_rtype_morphism : forall r t p1 p2, rid_rtype t r p1 = rid_rtype t r p2.
   Parameter rbelong_dec : forall r t,
       {rbelong r t} + {~rbelong r t}.
   
   Axiom rid_rtype_injective : forall t r1 B1 r2 B2,
     rid_rtype t r1 B1 = rid_rtype t r2 B2 ->
       r1 = r2.
-    
 
   Parameter to_rid : forall t, RT t -> rid.
   Axiom to_rid_belong : forall t (rr : RT t),
     rbelong (to_rid t rr) t.
   Axiom to_rid_inverse : forall t r B,
       to_rid t (rid_rtype t r B) = r.
-  
 
   Parameter rfresh : rtype -> rid.
   Axiom fresh_not_belong : forall t,
@@ -43,11 +43,14 @@ Module Type RegionTypes.
 End RegionTypes.
 
 Module RegionTypesNat (ms : SetsOn) : RegionTypes.
+  Require Import ProofIrrelevance.
+
   Module Nat_Sets := ms Nat_as_OT.
 
   Definition rid := nat.
   Definition rtype := Nat_Sets.t.
   Definition RT (t : rtype) := { r | Nat_Sets.In r t }.
+
   Definition rbelong : rid -> rtype -> Prop := Nat_Sets.In.
   Definition rid_rtype : forall t r,
       rbelong r t -> RT t.
@@ -55,6 +58,12 @@ Module RegionTypesNat (ms : SetsOn) : RegionTypes.
    exists r.
    trivial.
   Defined.
+
+  Lemma rid_rtype_morphism : forall r t p1 p2, rid_rtype t r p1 = rid_rtype t r p2.
+    repeat intro.
+    generalize (proof_irrelevance _ p1 p2).
+    intro; subst; auto.
+  Qed.
 
   Definition rbelong_dec : forall r t,
       {rbelong r t} + {~rbelong r t}.
@@ -78,7 +87,7 @@ Module RegionTypesNat (ms : SetsOn) : RegionTypes.
    cbv; intuition.
    destruct rr; trivial.
   Qed.
-  
+
   Proposition to_rid_inverse : forall t r B,
       to_rid t (rid_rtype t r B) = r.
    cbv; intuition.
@@ -134,11 +143,16 @@ Module TadaModel (ht : HeapTypes) (Import rt : RegionTypes).
      sa_sa : SepAlg sa_op
    }.
 
+ Definition Promises := (AID -> bool) -> nat.
+ Definition Witnesses := AID -> nat.
+
  Definition RSA (t : rtype) := RT t -> SA.
 
  Record LState (t : rtype) (rsat : RSA t) := {
    ls_hp : store;
-   ls_gd : RT t -> RSA t
+   ls_gd : forall r : RT t, sa_dom (rsat r);
+   ls_pr : RT t -> Promises;
+   ls_wi : RT t -> Witnesses
   }.
 
  Definition SState (t : rtype) (rsat : RSA t) := RT t -> LState t rsat.
@@ -148,9 +162,7 @@ Module TadaModel (ht : HeapTypes) (Import rt : RegionTypes).
        we ill interpret it as the local closure.
   *)
  Definition IF_Spec (t : rtype) (rsat : RSA t) (r : RT t) :=
-   (sa_dom (rsat r)) -> relation (SState t rsat).
-
-     
+   (sa_dom (rsat r)) -> AID -> relation (SState t rsat).
 
  Record World (t : rtype) :=
    {
@@ -159,7 +171,5 @@ Module TadaModel (ht : HeapTypes) (Import rt : RegionTypes).
      world_shared : SState t world_rsa;
      world_if_spec : forall r : RT t, IF_Spec t world_rsa r
    }.
-
-
 
 End TadaModel.
