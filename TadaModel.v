@@ -42,10 +42,14 @@ Module Type RegionTypes.
       (r' = r \/ rbelong r' t).
 End RegionTypes.
 
-Module RegionTypesNat (ms : SetsOn) : RegionTypes.
-  Require Import ProofIrrelevance.
+(* I think it was premature to create a module type for
+   region types.  Just use the concrete representation.
+   Otherwise, we have to export a notion of fold...
+*)
 
-  Module Nat_Sets := ms Nat_as_OT.
+Module RegionTypesNat <: RegionTypes.
+  Require Import ProofIrrelevance.
+  Module Nat_Sets := MSetList.Make Nat_as_OT. (*MSets.MSetAVL.Make Nat_as_OT.*)
 
   Definition rid := nat.
   Definition rtype := Nat_Sets.t.
@@ -101,7 +105,7 @@ Module RegionTypesNat (ms : SetsOn) : RegionTypes.
 
   Lemma fresh_not_belong : forall t,
       ~ rbelong (rfresh t) t.
-   cbv; intuition.
+   cbv [rbelong rfresh rtype]; intuition.
    remember (Nat_Sets.max_elt t) as x.
    symmetry in Heqx.
    destruct x.
@@ -129,7 +133,9 @@ Module RegionTypesNat (ms : SetsOn) : RegionTypes.
   Qed.
 End RegionTypesNat.
 
-Module TadaModel (ht : HeapTypes) (Import rt : RegionTypes).
+
+Module TadaModel (ht : HeapTypes) .
+ Import RegionTypesNat.
  Module Export TheHeap := MHeaps ht.
 
  (* Action identifiers are pairs of string and lists of values *)
@@ -142,6 +148,17 @@ Module TadaModel (ht : HeapTypes) (Import rt : RegionTypes).
      sa_op : partial_op sa_dom;
      sa_sa : SepAlg sa_op
    }.
+
+ Program Instance unit_Setoid : Setoid unit.
+ Instance unit_sa : SepAlg (fun _ _ => lift_val tt).
+  apply Build_SepAlg with (Setof.singleton tt); intuition.
+   cbv; auto.
+   exists tt; destruct m; cbv; intuition.
+    exists tt; intuition.
+   destruct m1; destruct m2; reflexivity.
+ Defined.
+
+ Definition unit_SA : SA := {| sa_dom := unit |}.
 
  Definition Promises := (AID -> bool) -> nat.
  Definition Witnesses := AID -> nat.
@@ -164,12 +181,64 @@ Module TadaModel (ht : HeapTypes) (Import rt : RegionTypes).
  Definition IF_Spec (t : rtype) (rsat : RSA t) (r : RT t) :=
    (sa_dom (rsat r)) -> AID -> relation (SState t rsat).
 
- Record World (t : rtype) :=
+ Record PreWorld (t : rtype) :=
    {
      world_rsa : RSA t;
      world_local : LState t world_rsa;
      world_shared : SState t world_rsa;
      world_if_spec : forall r : RT t, IF_Spec t world_rsa r
    }.
+
+ (* This should be factored out. *)
+ Definition partial_val_fmap {A} (f : A -> A) : 
+         partial_val (T := A) -> partial_val (T:=A) :=
+   fun v => match v with
+     | {| defined := defined; val := val |} =>
+         {| defined := defined; val := f val |}
+   end.
+
+ Fixpoint sa_op_list {s : SA} (init : s) (l : list s)
+    : partial_val (T:=s) :=
+   match l with
+   | nil => lift_val init
+   | cons a l' => let (d, v) := sa_op_list init l' in
+     let (d', v') := sa_op _ a v in
+       {| defined := d /\ d'; val := v' |}
+   end.
+
+ Lemma elements_belong (t : rtype) : forall x,
+    InA (@eq nat) x (Nat_Sets.elements t) ->
+        rbelong x t.
+  intros.
+  rewrite <- Nat_Sets.elements_spec1.
+  intuition.
+ Qed.
+
+ Definition RIDs (t : rtype) : list (RT t).
+  generalize (elements_belong t).
+  generalize (Nat_Sets.elements t).
+  induction l; intros.
+   exact nil.
+   apply cons.
+   apply rid_rtype with a.
+   intuition.
+  
+   apply IHl.
+   intuition.
+ Defined.
+
+ Lemma RIDs_spec (t : rtype) : forall x,
+   rbelong (to_rid _ x) t <-> In x (RIDs t).
+  split.
+ Admitted. (* Prove this! *)
+
+ Definition guard_total {t : rtype} (w : PreWorld t) (r : RT t)
+     : partial_val (T := world_rsa t w r) :=
+    let l :=
+      map (fun r0 : RT t => ls_gd t (world_rsa t w) (world_shared t w r0) r)
+          (RIDs t) in
+     sa_op_list (ls_gd t (world_rsa t w) (world_local t w) r) l.
+
+
 
 End TadaModel.
