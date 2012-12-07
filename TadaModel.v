@@ -28,6 +28,9 @@ Module Type RegionTypes.
   Axiom to_rid_inverse : forall t r B,
       to_rid t (rid_rtype t r B) = r.
 
+  Axiom rid_rtype_inverse : forall t k,
+      k = rid_rtype t (to_rid t k) (to_rid_belong t k).
+
   Parameter rfresh : rtype -> rid.
   Axiom fresh_not_belong : forall t,
       ~ rbelong (rfresh t) t.
@@ -40,6 +43,9 @@ Module Type RegionTypes.
   Axiom rtextend_extended : forall t r P r',
     rbelong r' (rtextend t r P) <->
       (r' = r \/ rbelong r' t).
+
+  Parameter RIDs : forall t, list (RT t).
+  Axiom RIDs_spec : forall t x, In x (RIDs t).
 End RegionTypes.
 
 (* I think it was premature to create a module type for
@@ -96,6 +102,15 @@ Module RegionTypesNat <: RegionTypes.
       to_rid t (rid_rtype t r B) = r.
    cbv; intuition.
   Qed.
+
+  Proposition rid_rtype_inverse : forall t k,
+      k = rid_rtype t (to_rid t k) (to_rid_belong t k).
+   intros.
+   destruct k.
+   cbv.
+   f_equal.
+   apply proof_irrelevance.
+  Qed.
   
   Definition rfresh (t : rtype) : rid :=
    match (Nat_Sets.max_elt t) with
@@ -131,6 +146,58 @@ Module RegionTypesNat <: RegionTypes.
    generalize (Nat_Sets.add_spec t r r').
    intuition.
   Qed.
+
+ Lemma elements_belong (t : rtype) : forall x,
+    InA (@eq nat) x (Nat_Sets.elements t) ->
+        rbelong x t.
+  intros.
+  rewrite <- Nat_Sets.elements_spec1.
+  intuition.
+ Qed.
+
+ Definition RIDs0 (t : rtype) (l : list rid) : (forall x, In x l -> rbelong x t) -> list (RT t).
+  induction l; intros.
+   exact nil.
+
+   apply cons.
+    apply rid_rtype with a; intuition.
+    apply IHl; intuition.
+ Defined.
+
+ Lemma elements_belong' (t : rtype) : forall x,
+    In x (Nat_Sets.elements t) ->
+        rbelong x t.
+  intros.
+  rewrite <- Nat_Sets.elements_spec1.
+  intuition.
+ Qed.
+
+ Definition RIDs t := RIDs0 t (Nat_Sets.elements t) (elements_belong' t).
+
+ Lemma RIDs0_spec (t : rtype) (l : list rid) (H : forall x, In x l -> rbelong x t) :
+   forall k : RT t, In (to_rid _ k) l -> In k (RIDs0 t l H).
+  intros.
+  induction l; inversion H0; subst.
+   left.
+   rewrite rid_rtype_inverse.
+   f_equal.
+   apply proof_irrelevance.
+  
+   right.
+   apply IHl; trivial.
+ Qed.
+
+ Lemma RIDs_spec (t : rtype) : forall x, In x (RIDs t).
+  intros.
+  apply RIDs0_spec.
+  generalize (Nat_Sets.elements_spec1 t (to_rid t x)); intro.
+  generalize (to_rid_belong t x).
+  intuition.
+  rewrite InA_alt in H1.
+  firstorder; subst; trivial.
+ Qed.
+
+
 End RegionTypesNat.
 
 
@@ -206,31 +273,7 @@ Module TadaModel (ht : HeapTypes) .
        {| defined := d /\ d'; val := v' |}
    end.
 
- Lemma elements_belong (t : rtype) : forall x,
-    InA (@eq nat) x (Nat_Sets.elements t) ->
-        rbelong x t.
-  intros.
-  rewrite <- Nat_Sets.elements_spec1.
-  intuition.
- Qed.
-
- Definition RIDs (t : rtype) : list (RT t).
-  generalize (elements_belong t).
-  generalize (Nat_Sets.elements t).
-  induction l; intros.
-   exact nil.
-   apply cons.
-   apply rid_rtype with a.
-   intuition.
   
-   apply IHl.
-   intuition.
- Defined.
-
- Lemma RIDs_spec (t : rtype) : forall x,
-   rbelong (to_rid _ x) t <-> In x (RIDs t).
-  split.
- Admitted. (* Prove this! *)
 
  Definition guard_total {t : rtype} (w : PreWorld t) (r : RT t)
      : partial_val (T := world_rsa t w r) :=
@@ -239,6 +282,10 @@ Module TadaModel (ht : HeapTypes) .
           (RIDs t) in
      sa_op_list (ls_gd t (world_rsa t w) (world_local t w) r) l.
 
-
+ Record World (t : rtype) :=
+   {
+     world_wrld :> PreWorld t;
+     world_well_guarded : forall (r : RT t), defined (guard_total world_wrld r)
+   }.
 
 End TadaModel.
