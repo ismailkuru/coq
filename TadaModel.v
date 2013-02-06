@@ -243,7 +243,7 @@ Module TadaModel (ht : HeapTypes) .
 
  (* Type for interference specifications.
      Choices: this does not need to be local (with respect to the guard) --
-       we ill interpret it as the local closure.
+       we will interpret it as the local closure.
   *)
  Definition IF_Spec (t : rtype) (rsat : RSA t) (r : RT t) :=
    (sa_dom (rsat r)) -> AID -> relation (SState t rsat).
@@ -287,5 +287,16 @@ Module TadaModel (ht : HeapTypes) .
      world_wrld :> PreWorld t;
      world_well_guarded : forall (r : RT t), defined (guard_total world_wrld r)
    }.
+
+ (* TODO:
+    1. Define Rely relation
+    2. Define Guarantee relation
+    3. Prove compatability.
+  *)
+ 
+(* Guarantee relation.
+   An update should be permitted if it is permitted by all regions.
+   An update is permitted by a region if it is the identity on that region.
+   An update is permitted by 
 
 End TadaModel.
