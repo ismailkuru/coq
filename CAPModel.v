@@ -7,10 +7,13 @@ Require Import MSets.
 Require Import SetoidClass.
 Require Import Tactics.
 Require Import CountableFiniteMaps.
-
+Require Import SeparationAlgebras.
+Require Import Setof.
+Require Import HeapSeparationAlgebra.
 
 Module CAPModel (ht : HeapTypes) .
  Module Export TheHeap := MHeaps ht.
+ Module HSA := (HeapSA ht TheHeap).
 
  (* Action identifiers are pairs of string and lists of values *)
  Definition AID := (string * (list Val))%type.
@@ -27,21 +30,40 @@ Module CAPModel (ht : HeapTypes) .
     action identifier. *)
  Record Token := { tok_rid : RID; tok_aid : AID }.
 
- Definition Cap := Token -> FracPerm.T.
+ Module CapPSAP : PermissionSeparationAlgebraParams.
+   Definition A := Token.
+   Definition PA := FracPerm.T.
+   Instance PA_Setoid : Setoid PA := FracPerm.FPsetoid.
+   Definition op : partial_dec_op PA := FracPerm.plus.
+   Instance PA_PermAlg : PermAlgMixin op := FracPerm.FP_pa.
+ End CapPSAP.
+
+ Module CapSA := PermissionSeparationAlgebra CapPSAP.
+
+ Definition Cap := CapSA.S.
 
  Record LState := {
    ls_hp : store;
    ls_cap : Cap
   }.
 
+ Definition ls_sepop : partial_op LState :=
+  fun ls ls' =>
+    let (lsh, lsc) := ls in
+    let (lsh', lsc') := ls' in
+    let (hd, hv) := HSA.sepop lsh lsh' in
+    let (cd, cv) := CapSA.sepop lsc lsc' in
+      {| defined := hd /\ cd; val := {| ls_hp := hv; ls_cap := cv |} |}.
+
  Definition SState := CFMap RID LState.
  Definition Act := SState -> LState -> Prop.
  Definition AMod := Token -> option Act.
 
- Record SState := {
-   ss_ls :> LState;
-   ss_ss : CFMap RID LState
- }.
+
+
+
+
+
 
  (* Type for interference specifications.
      Choices: this does not need to be local (with respect to the guard) --
