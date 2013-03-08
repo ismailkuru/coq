@@ -76,5 +76,37 @@ Section CountableFiniteMaps.
    rewrite <- cnt_inverse2.
    apply nfm_fresh_is_fresh.
   Qed.
+  Inductive cfm_def_at (m : CFMap A R) : A -> Prop :=
+    | cfm_def_witness : forall a v, Some v = cfm m a -> cfm_def_at m a.
+  Definition cfm_make_def_at (m : CFMap A R) (a : A) : option (cfm_def_at m a) :=
+   match (cfm m a) as o return (o = cfm m a -> option (cfm_def_at m a)) with
+   | Some r => fun H : Some r = cfm m a => Some (cfm_def_witness m a H)
+   | None => fun _ => None
+   end eq_refl.
+  Fixpoint cfm_dom_fold_to
+     (m : CFMap A R) (T : Type) (f : T -> forall a, cfm_def_at m a -> T) (o : T) (n : nat) : T :=
+    match n with 
+    | O => o
+    | S n' => let t' := (cfm_dom_fold_to f o n') in
+            match (cfm_make_def_at m (cnt_choose A n)) with
+            | Some da => f t' (cnt_choose A n) da
+            | _ => t' end
+            end.
+            
+  Definition cfm_dom_fold (m : CFMap A R) (T : Type)
+     (f : T -> forall a, cfm_def_at m a -> T) (o : T) : T :=
+        cfm_dom_fold_to f o (nfm_bound m).
+  Definition cfm_def_get (m : CFMap A R) (a : A) (P : cfm_def_at m a) : R.
+   remember (cfm m a).
+   destruct (o).
+    exact r.
+    contradict P.
+    intro.
+    destruct H.
+    rewrite <- Heqo in H.
+     inversion H.
+  Defined.
 
 End CountableFiniteMaps.
+
+

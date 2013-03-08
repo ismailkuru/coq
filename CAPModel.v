@@ -10,6 +10,7 @@ Require Import CountableFiniteMaps.
 Require Import SeparationAlgebras.
 Require Import Setof.
 Require Import HeapSeparationAlgebra.
+Require Import SeparationAlgebraProduct.
 
 Module CAPModel (ht : HeapTypes) .
  Module Export TheHeap := MHeaps ht.
@@ -42,20 +43,19 @@ Module CAPModel (ht : HeapTypes) .
 
  Definition Cap := CapSA.S.
 
- Record LState := {
-   ls_hp : store;
-   ls_cap : Cap
-  }.
+ Definition LState := (store * Cap)%type.
 
- Definition ls_sepop : partial_op LState :=
-  fun ls ls' =>
-    let (lsh, lsc) := ls in
-    let (lsh', lsc') := ls' in
-    let (hd, hv) := HSA.sepop lsh lsh' in
-    let (cd, cv) := CapSA.sepop lsc lsc' in
-      {| defined := hd /\ cd; val := {| ls_hp := hv; ls_cap := cv |} |}.
+ Existing Instance prod_setoid.
+ Existing Instance prod_SA.
+ Definition ls_sepop := prod_sepop _ HSA.sepop _ CapSA.sepop.
+ Instance ls_SA : SepAlg ls_sepop := prod_SA _ _ _ _.
 
  Definition SState := CFMap RID LState.
+ 
+ Definition lcol (l : LState) (s : SState) : partial_val (T:=LState) :=
+   cfm_dom_fold s (fun (o : partial_val (T:=LState))
+                       (a : 
+
  Definition Act := SState -> LState -> Prop.
  Definition AMod := Token -> option Act.
 
