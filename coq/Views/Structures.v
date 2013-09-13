@@ -576,4 +576,3 @@ Existing Instance op_lift_resp.
 Existing Instance op_lift_ass.
 Existing Instance op_lift_comm.
 
-

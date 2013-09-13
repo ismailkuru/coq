@@ -31,7 +31,7 @@ Module CAPModel (ht : HeapTypes) .
     action identifier. *)
  Record Token := { tok_rid : RID; tok_aid : AID }.
 
- Module CapPSAP : PermissionSeparationAlgebraParams.
+ Module CapPSAP <: PermissionSeparationAlgebraParams.
    Definition A := Token.
    Definition PA := FracPerm.T.
    Instance PA_Setoid : Setoid PA := FracPerm.FPsetoid.
@@ -52,75 +52,48 @@ Module CAPModel (ht : HeapTypes) .
 
  Definition SState := CFMap RID LState.
  
- Definition lcol (l : LState) (s : SState) : partial_val (T:=LState) :=
-   cfm_dom_fold s (fun (o : partial_val (T:=LState))
-                       (a : 
+ Definition lcol (l : LState) (s : SState) : partial_val (T:=LState)
+  :=
+   cfm_dom_fold
+  (fun (X : partial_val) (a : RID) (H : cfm_def_at s a) =>
+   lift_op ls_sepop X (lift_val (cfm_def_get H))) (lift_val l).
+
 
  Definition Act := SState -> LState -> Prop.
  Definition AMod := Token -> option Act.
 
-
-
-
-
-
-
- (* Type for interference specifications.
-     Choices: this does not need to be local (with respect to the guard) --
-       we will interpret it as the local closure.
-  *)
- Definition IF_Spec (t : rtype) (rsat : RSA t) (r : RT t) :=
-   (sa_dom (rsat r)) -> AID -> relation (SState t rsat).
-
- Record PreWorld (t : rtype) :=
+ Record wellformed (l : LState) (s : SState) (a : AMod) : Prop :=
    {
-     world_rsa : RSA t;
-     world_local : LState t world_rsa;
-     world_shared : SState t world_rsa;
-     world_if_spec : forall r : RT t, IF_Spec t world_rsa r
+     wf_col_def : defined (lcol l s);
+     wf_caps_acts : forall t, None = a t -> (snd (val (lcol l s))) t == FracPerm.zero;
+     wf_act_regs : forall t, None = cfm s (tok_rid t) -> None = a t
    }.
 
- (* This should be factored out. *)
- Definition partial_val_fmap {A} (f : A -> A) : 
-         partial_val (T := A) -> partial_val (T:=A) :=
-   fun v => match v with
-     | {| defined := defined; val := val |} =>
-         {| defined := defined; val := f val |}
-   end.
+ Record world :=
+   {
+     wrld_local : LState;
+     wrld_shared : SState;
+     wrld_amod : AMod;
+     wrld_wf :> wellformed wrld_local wrld_shared wrld_amod
+   }.
 
- Fixpoint sa_op_list {s : SA} (init : s) (l : list s)
-    : partial_val (T:=s) :=
-   match l with
-   | nil => lift_val init
-   | cons a l' => let (d, v) := sa_op_list init l' in
-     let (d', v') := sa_op _ a v in
-       {| defined := d /\ d'; val := v' |}
-   end.
 
+ Existing Instance cfm_setoid.
+ Definition world_sepop : partial_op world.
+  intros w1 w2.
+  destruct w1.
+  destruct w2.
+  set (ls_sepop wrld_local0 wrld_local1).
+  set (defined p /\ wrld_shared0 == wrld_shared1 /\ wrld_amod0 == wrld_amod1).
+  split.
+  exact (defined p /\ wrld_shared0 == wrld_shared1 /\ wrld_amod0 == wrld_amod1).
+  
+  remember (ls_sepop wrld_local0 wrld_local1).
+  destruct p.
+  
+  split.
   
 
- Definition guard_total {t : rtype} (w : PreWorld t) (r : RT t)
-     : partial_val (T := world_rsa t w r) :=
-    let l :=
-      map (fun r0 : RT t => ls_gd t (world_rsa t w) (world_shared t w r0) r)
-          (RIDs t) in
-     sa_op_list (ls_gd t (world_rsa t w) (world_local t w) r) l.
+ HSA.sepop
 
- Record World (t : rtype) :=
-   {
-     world_wrld :> PreWorld t;
-     world_well_guarded : forall (r : RT t), defined (guard_total world_wrld r)
-   }.
-
- (* TODO:
-    1. Define Rely relation
-    2. Define Guarantee relation
-    3. Prove compatability.
-  *)
- 
-(* Guarantee relation.
-   An update should be permitted if it is permitted by all regions.
-   An update is permitted by a region if it is the identity on that region.
-   An update is permitted by 
-
-End TadaModel.
+End CAPModel.

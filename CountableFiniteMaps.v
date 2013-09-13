@@ -1,5 +1,6 @@
-
+Add LoadPath "C:\td202\GitHub\coq\views".
 Require Import SetoidClass.
+Require Import MySetoids.
 
 Section Countable.
 
@@ -106,6 +107,17 @@ Section CountableFiniteMaps.
     rewrite <- Heqo in H.
      inversion H.
   Defined.
+  
+  Section CFMSetoid.
+    Context `{R_Setoid : Setoid R}.
+    Program Instance cfm_setoid : Setoid (CFMap A R) :=
+      {| equiv := fun x y => forall v, cfm x v == cfm y v |}.
+    Require Import Tactics.
+    Obligation 1.
+     split; repeat intro;
+     use_foralls; rewr auto.
+    Qed.
+  End CFMSetoid.
 
 End CountableFiniteMaps.
 
